@@ -270,6 +270,17 @@ export default function App() {
               <Download className="h-4 w-4" /> Export kit
             </Button>
             <Button
+              variant="secondary"
+              type="button"
+              onClick={() => {
+                const subject = encodeURIComponent('Bug report: OP-XY Drum Utility');
+                const body = encodeURIComponent('What happened?\nSteps to reproduce:\nExpected:\nActual:\nBrowser/OS:');
+                window.location.href = `mailto:yuugo@yuugo.xyz?subject=${subject}&body=${body}`;
+              }}
+            >
+              Report bug
+            </Button>
+            <Button
               variant="ghost"
               size="sm"
               type="button"
@@ -283,6 +294,11 @@ export default function App() {
         </header>
 
         <Tabs defaultValue="kit" className="space-y-4">
+          <TabsList className="w-fit">
+            <TabsTrigger value="kit">Kit</TabsTrigger>
+            <TabsTrigger value="info">Info</TabsTrigger>
+          </TabsList>
+
           <TabsContent value="kit" className="space-y-4">
             <div className="grid gap-4 lg:grid-cols-3">
               <Card className="lg:col-span-1 hover-lift fade-in-up">
@@ -593,17 +609,18 @@ export default function App() {
             </div>
           </TabsContent>
 
-          <TabsContent value="notes">
+          <TabsContent value="info">
             <Card className="fade-in-up">
               <CardHeader>
-                <CardTitle className="text-base">Build plan</CardTitle>
-                <CardDescription>UI is shadcn + Tailwind; wiring to audio pipeline comes next.</CardDescription>
+                <CardTitle className="text-base">How to use</CardTitle>
+                <CardDescription>Quick steps for building an OP-XY kit.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>• Drag/drop & file picker feed the 24 slots in pad order.</p>
-                <p>• Slot editor exposes trim, reverse, bit depth, and sample rate — the values will drive the rendering pipeline.</p>
-                <p>• Export button stays disabled until at least one slot is loaded.</p>
-                <p>• We will hook this screen to the existing `app.js` logic for trimming, resampling, and `patch.json` packaging.</p>
+                <p><strong>Load samples:</strong> drop audio files or click Browse; they fill the 24 slots in order.</p>
+                <p><strong>Edit a slot:</strong> click a slot, trim start/end, toggle reverse, and pick bit depth/sample rate. Shaded waveform shows what’s trimmed out.</p>
+                <p><strong>Global settings:</strong> set global bit depth and sample rate to push those values to every slot at once.</p>
+                <p><strong>Preview:</strong> use Preview on a loaded slot to hear the processed audio.</p>
+                <p><strong>Export:</strong> once a slot is loaded, use Export kit to package a `.preset` (processing hookup in progress).</p>
               </CardContent>
             </Card>
           </TabsContent>
