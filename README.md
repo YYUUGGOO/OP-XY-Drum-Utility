@@ -20,4 +20,5 @@ PRs welcome. Keep it simple, keep it working. File bugs via the app’s Report B
 
 ## Donation
 If you feel inclined to support the work I do, you can do so using ko-fi.
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q31Q4X0W)
