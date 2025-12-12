@@ -1,3 +1,6 @@
+OP-XY JSON File Structure by Kevin Morrill
+More information at: https://gist.github.com/kmorrill/898579c18df24ac5094f691cd411d741
+
 We're going to create a preset patch using this guide.
 
 Technical Specification for OP-XY Patch JSON File Format

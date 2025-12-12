@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, HardDrive, Moon, Sparkles, Sun, Upload } from 'lucide-react';
+import JSZip from 'jszip';
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/ui/card';
 import { Input } from './components/ui/input';
@@ -9,7 +10,40 @@ import { Slider } from './components/ui/slider';
 import { Switch } from './components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { cn } from './lib/utils';
-import { decodeFile, playBuffer, processBuffer } from './lib/audio';
+import { decodeFile, encodeWav, playBuffer, processBuffer } from './lib/audio';
+
+const patchDefaults = {
+  engine: {
+    bendrange: 13653,
+    highpass: 0,
+    modulation: {
+      aftertouch: { amount: 21953, target: 18022 },
+      modwheel: { amount: 32767, target: 0 },
+      pitchbend: { amount: 16710, target: 0 },
+      velocity: { amount: 16383, target: 0 }
+    },
+    params: [16384, 16384, 16384, 16384, 16384, 16384, 16384, 16384],
+    playmode: 'mono',
+    'portamento.amount': 128,
+    'portamento.type': 32767,
+    transpose: 12,
+    'tuning.root': 0,
+    'tuning.scale': 3045,
+    'velocity.sensitivity': 6879,
+    volume: 24901,
+    width: 0
+  },
+  envelope: {
+    amp: { attack: 0, decay: 0, release: 0, sustain: 32767 },
+    filter: { attack: 3932, decay: 13167, release: 9502, sustain: 18062 }
+  },
+  fx: { active: false, params: [6963, 16711, 10382, 5632, 0, 32767, 0, 0], type: 'z lowpass' },
+  lfo: { active: true, params: [9168, 6334, 23210, 29491, 0, 0, 0, 18186], type: 'random' },
+  octave: -1,
+  platform: 'OP-XY',
+  type: 'drum',
+  version: 4
+};
 
 type Slot = {
   id: number;
@@ -47,6 +81,7 @@ export default function App() {
   const [globalBitDepth, setGlobalBitDepth] = useState('16');
   const [globalSampleRate, setGlobalSampleRate] = useState('44100');
   const [isEditing, setIsEditing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const waveformRef = useRef<HTMLCanvasElement>(null);
@@ -174,6 +209,83 @@ export default function App() {
     setSlots((prev) => prev.map((slot) => (slot.id === selectedSlot.id ? blank : slot)));
   };
 
+  const sanitizeFilename = (name: string, fallback: string) => {
+    if (!name || !name.trim()) return fallback;
+    const trimmed = name.trim();
+    const hasExt = /\.[a-zA-Z0-9]+$/.test(trimmed);
+    const safe = trimmed.replace(/[\\/:*?"<>|]/g, '_');
+    return hasExt ? safe : `${safe}.wav`;
+  };
+
+  const buildPatch = (entries: { slot: Slot; buffer: AudioBuffer; fileName: string }[]) => {
+    const baseNote = 53;
+    const regions = entries.map(({ slot, buffer, fileName }, idx) => {
+      const framecount = buffer.length;
+      return {
+        'fade.in': 0,
+        'fade.out': 0,
+        framecount,
+        hikey: baseNote + idx,
+        lokey: baseNote + idx,
+        pan: 0,
+        'pitch.keycenter': 60,
+        playmode: 'oneshot',
+        reverse: slot.reverse,
+        sample: fileName,
+        'sample.end': framecount,
+        transpose: 0,
+        tune: 0
+      };
+    });
+
+    return {
+      name: kitName || 'OP-XY kit',
+      ...patchDefaults,
+      regions
+    };
+  };
+
+  const handleExport = async () => {
+    if (!hasContent || isExporting) return;
+    setIsExporting(true);
+    try {
+      const readySlots = slots.filter((s) => s.status === 'ready' && (s.processed || s.buffer));
+      if (!readySlots.length) return;
+
+      const zip = new JSZip();
+      const processedEntries: { slot: Slot; buffer: AudioBuffer; fileName: string }[] = [];
+
+      for (const slot of readySlots) {
+        const processed = slot.processed || (slot.buffer ? reprocessSlot(slot).processed : null);
+        if (!processed) continue;
+        const wavBlob = encodeWav(processed);
+        const arrayBuffer = await wavBlob.arrayBuffer();
+        const fallback = `slot_${String(slot.id).padStart(2, '0')}.wav`;
+        const fileName = sanitizeFilename(slot.name, fallback);
+        zip.file(fileName, arrayBuffer);
+        processedEntries.push({ slot, buffer: processed, fileName });
+      }
+
+      const patch = buildPatch(processedEntries);
+      zip.file('patch.json', JSON.stringify(patch, null, 2));
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${kitName || 'op-xy-kit'}.preset.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed', err);
+      alert('Export failed. Check console for details.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const previewSelected = () => {
     const slot = slots.find((s) => s.id === selectedSlotId);
     if (!slot || !(slot.processed || slot.buffer)) return;
@@ -266,8 +378,8 @@ export default function App() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" className="gap-2" type="button" disabled={!hasContent}>
-              <Download className="h-4 w-4" /> Export kit
+            <Button variant="outline" className="gap-2" type="button" disabled={!hasContent || isExporting} onClick={handleExport}>
+              <Download className="h-4 w-4" /> {isExporting ? 'Exporting…' : 'Export kit'}
             </Button>
             <Button
               variant="secondary"
@@ -601,8 +713,8 @@ export default function App() {
                     <p>{hasContent ? 'Ready to export' : 'Load at least one sample to enable export.'}</p>
                     <p className="mt-2 text-xs text-muted-foreground">Bit depth & sample rate choices apply per slot before bundling.</p>
                   </div>
-                  <Button className="w-full gap-2" type="button" disabled={!hasContent}>
-                    <Download className="h-4 w-4" /> Download .preset zip
+                  <Button className="w-full gap-2" type="button" disabled={!hasContent || isExporting} onClick={handleExport}>
+                    <Download className="h-4 w-4" /> {isExporting ? 'Exporting…' : 'Download .preset zip'}
                   </Button>
                 </CardContent>
               </Card>
@@ -620,7 +732,7 @@ export default function App() {
                 <p><strong>Edit a slot:</strong> click a slot, trim start/end, toggle reverse, and pick bit depth/sample rate. Shaded waveform shows what’s trimmed out.</p>
                 <p><strong>Global settings:</strong> set global bit depth and sample rate to push those values to every slot at once.</p>
                 <p><strong>Preview:</strong> use Preview on a loaded slot to hear the processed audio.</p>
-                <p><strong>Export:</strong> once a slot is loaded, use Export kit to package a `.preset` (processing hookup in progress).</p>
+                <p><strong>Export:</strong> once a slot is loaded, use Export kit to package a `.preset` zip.</p>
               </CardContent>
             </Card>
           </TabsContent>
