@@ -17,3 +17,8 @@ PRs welcome. Keep it simple, keep it working. File bugs via the app’s Report B
 
 - Clone the Repo
 - `cd` to the folder then `npm install && npm run dev` then open the local URL.
+
+## Donation
+If you feel inclined to support the work I do, you can do so using ko-fi.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q31Q4X0W)
