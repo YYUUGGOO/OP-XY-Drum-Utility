@@ -7,6 +7,10 @@ A Drum Utility for the Teenage Engineering OP-XY inspired by the original Drum U
 - Global bit depth and sample rate to push one setting to every slot.
 - Waveform preview.
 
+## To-Do
+- Fix Bugs
+- adding slicer (convert OP-1/OP-Z drum kits)
+
 ## How it works
 1) Drop or pick audio files; fill the 24 slots in order.
 2) Click a Edit to trim start/end, toggle reverse, pick bit depth and sample rate.
