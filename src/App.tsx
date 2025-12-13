@@ -1,3 +1,4 @@
+import type { DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, HardDrive, Moon, Sparkles, Sun, Upload } from 'lucide-react';
 import JSZip from 'jszip';
@@ -38,12 +39,39 @@ const patchDefaults = {
     filter: { attack: 3932, decay: 13167, release: 9502, sustain: 18062 }
   },
   fx: { active: false, params: [6963, 16711, 10382, 5632, 0, 32767, 0, 0], type: 'z lowpass' },
-  lfo: { active: true, params: [9168, 6334, 23210, 29491, 0, 0, 0, 18186], type: 'random' },
+  lfo: { active: false, params: [9168, 6334, 23210, 29491, 0, 0, 0, 18186], type: 'random' },
   octave: -1,
   platform: 'OP-XY',
   type: 'drum',
   version: 4
 };
+
+const slotLabelDefaults = [
+  'kick',
+  'kick alt',
+  'snare',
+  'snare',
+  'rim',
+  'clap / snap',
+  'tambo / perc',
+  '',
+  'closed hi-hat',
+  'kick',
+  'open hi-hat',
+  '',
+  '',
+  'ride',
+  '',
+  'crash',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  '',
+  ''
+];
 
 type Slot = {
   id: number;
@@ -137,41 +165,49 @@ export default function App() {
   const handleFiles = async (files: FileList | null) => {
     if (!files || !files.length) return;
     const fileArray = Array.from(files);
+    const startFrom = pendingSlotId ?? selectedSlotId;
+
     for (let i = 0; i < fileArray.length; i++) {
-      const startFrom = pendingSlotId ?? selectedSlotId;
-      const targetSlot = startFrom + i - 1;
-      const slotId = slots[targetSlot] ? slots[targetSlot].id : null;
-      if (!slotId) break;
+      const targetIndex = startFrom + i - 1;
+      const targetSlot = slots[targetIndex];
+      if (!targetSlot) break;
+
       const file = fileArray[i];
       try {
         const buffer = await decodeFile(file);
-        const next: Slot = {
-          ...slots.find((s) => s.id === slotId)!,
-          name: file.name,
-          status: 'ready',
+        const baseName = file.name.replace(/\.[^.]+$/, '') || `Slot ${String(targetSlot.id).padStart(2, '0')}`;
+        const hydratedSlot: Slot = {
+          ...targetSlot,
+          name: baseName,
           buffer,
-          processed: buffer,
+          processed: undefined,
+          start: 0,
+          end: 100,
+          reverse: false,
           bitDepth: globalBitDepth,
           sampleRate: globalSampleRate,
+          status: 'ready',
           lengthLabel: formatDuration(buffer)
         };
-        const reprocessed = reprocessSlot(next);
-        updateSlotSync(slotId, reprocessed);
+        const processedSlot = reprocessSlot(hydratedSlot);
+        updateSlotSync(targetSlot.id, processedSlot);
       } catch (err) {
-        console.error('Decode failed', err);
+        console.error('Failed to load file', err);
       }
     }
+
     setPendingSlotId(null);
   };
 
-  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    handleFiles(event.dataTransfer.files);
+  const onBrowseClick = () => {
+    setPendingSlotId(selectedSlotId);
+    fileInputRef.current?.click();
   };
 
-  const onBrowseClick = () => {
-    setIsEditing(false);
-    fileInputRef.current?.click();
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setPendingSlotId(selectedSlotId);
+    handleFiles(e.dataTransfer?.files ?? null);
   };
 
   const updateSlot = (partial: Partial<Slot>) => {
@@ -181,8 +217,7 @@ export default function App() {
         if (slot.id !== selectedSlot.id) return slot;
         const next = { ...slot, ...partial } as Slot;
         if (next.buffer) {
-          const processedSlot = reprocessSlot(next);
-          return processedSlot;
+          return reprocessSlot(next);
         }
         return next;
       })
@@ -286,14 +321,13 @@ export default function App() {
     }
   };
 
-  const previewSelected = () => {
-    const slot = slots.find((s) => s.id === selectedSlotId);
-    if (!slot || !(slot.processed || slot.buffer)) return;
+  const previewSlot = (slot: Slot) => {
+    if (!(slot.processed || slot.buffer)) return;
     if (stopRef.current) {
       stopRef.current();
       stopRef.current = null;
     }
-    stopRef.current = playBuffer(slot.processed || slot.buffer);
+    stopRef.current = playBuffer(slot.processed || slot.buffer!);
   };
 
   useEffect(() => {
@@ -537,7 +571,7 @@ export default function App() {
                             )}
                           >
                             <div className="flex w-full items-center justify-between text-xs text-muted-foreground">
-                              <span>Slot {slot.id.toString().padStart(2, '0')}</span>
+                              <span>{`Slot ${slot.id} – ${slotLabelDefaults[slot.id - 1] ?? ''}`}</span>
                               <span className={cn('rounded-full px-2 py-0.5 text-[11px] uppercase', slot.status === 'ready' ? 'bg-foreground/10 text-foreground' : 'bg-muted text-muted-foreground')}>
                                 {slot.status === 'ready' ? 'loaded' : 'empty'}
                               </span>
@@ -559,7 +593,7 @@ export default function App() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedSlotId(slot.id);
-                                    previewSelected();
+                                    previewSlot(slot);
                                   }}
                                 >
                                   Preview
@@ -606,7 +640,7 @@ export default function App() {
                                   <Button size="sm" variant="ghost" onClick={resetSlot}>
                                     Reset
                                   </Button>
-                                  <Button size="sm" variant="outline" onClick={previewSelected}>
+                                  <Button size="sm" variant="outline" onClick={() => previewSlot(slot)}>
                                     Preview
                                   </Button>
                                   <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>
